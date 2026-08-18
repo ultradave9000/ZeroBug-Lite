@@ -11,15 +11,28 @@ from board import SCL, SDA
 import busio
 import RPi.GPIO as GPIO
 
-# Import the PCA9685 module.
+# PCA9685 module - servo driver
 from adafruit_motor import servo
 from adafruit_pca9685 import PCA9685
 
+# consider using Adafruit CircuitPython ServoKit library? (Plus Blinka to allow CircuitPython to work in proper Python)
+
+
+# INA260 module - monitor current and voltage draw
+import board 
+import adafruit_ina260 #Monitor current and voltage draw
+
+# PS3 controller
+from evdev import InputDevice, categorize, ecodes #PS3 controller
+
+
 # constants
-SERVOMIN = 604.0 # This is the 'minimum' pulse length count (out of 4096)
-SERVOMAX = 2260.0 # This is the 'maximum' pulse length count (out of 4096)
-SERVO_FREQ = 50 # Analog servos run at ~50 Hz updates
-PCA_OE = 4 # PCA Output Enable Pin
+SERVOMIN = 375.0 # This is the 'minimum' pulse length count (out of 4096)
+SERVOMAX = 425.0 # This is the 'maximum' pulse length count (out of 4096)
+#SERVOMIN = 604.0 # This is the 'minimum' pulse length count (out of 4096)
+#SERVOMAX = 2260.0 # This is the 'maximum' pulse length count (out of 4096)
+SERVO_FREQ = 60 # My servos run at ~60 Hz updates
+PCA_OE = 4 # PCA Output Enable Pin - CHECK WHAT THIS IS FOR
 
 # global variables
 powerup = False;
@@ -29,10 +42,10 @@ powerdown = False;
 i2c_bus = busio.I2C(SCL, SDA, frequency=400)
 
 # Create a simple PCA9685 class instance.
-pca_a = PCA9685(i2c_bus, address=0x40)
-pca_b = PCA9685(i2c_bus, address=0x41)
+pca_a = PCA9685(i2c_bus, address=0x41)
+pca_b = PCA9685(i2c_bus, address=0x42)
 
-# Set the PWM frequency to 50hz.
+# Set the PWM frequency 
 pca_a.frequency = SERVO_FREQ
 pca_b.frequency = SERVO_FREQ
 # Set twice because of some i2c error stuff
@@ -40,37 +53,49 @@ time.sleep(0.1);
 pca_a.frequency = SERVO_FREQ
 pca_b.frequency = SERVO_FREQ
 
-clawOpen = False;
-clawClose = False;
-clawPos = 0.0;
 
-servos = [None] * 20
-servos[0] = servo.Servo(pca_a.channels[8],  actuation_range = 300, min_pulse=SERVOMIN, max_pulse=SERVOMAX)
-servos[1] = servo.Servo(pca_a.channels[9],  actuation_range = 300, min_pulse=SERVOMIN, max_pulse=SERVOMAX)
-servos[2] = servo.Servo(pca_a.channels[10], actuation_range = 300, min_pulse=SERVOMIN, max_pulse=SERVOMAX)
+# Legs are numbered as follows:
+# 0 = Left-Front
+# 1 = Left-Mid
+# 2 = Left-Rear
+# 3 = Right-Rear
+# 4 = Right-Mid
+# 5 = Right-Front
 
-servos[3] = servo.Servo(pca_a.channels[11],  actuation_range = 300, min_pulse=SERVOMIN, max_pulse=SERVOMAX)
-servos[4] = servo.Servo(pca_a.channels[12],  actuation_range = 300, min_pulse=SERVOMIN, max_pulse=SERVOMAX)
-servos[5] = servo.Servo(pca_a.channels[13], actuation_range = 300, min_pulse=SERVOMIN, max_pulse=SERVOMAX)
+# Define servo constants
+#                  1    2    3    4    5    6    7    8    9    10   11   12   13   14   15   16   17   18                    
+# servo_zero =    [384, 358, 373, 347, 365, 371, 394, 355, 375, 384, 360, 401, 378, 375, 351, 389, 397, 391] # zero deg position
+# servo_ppd =     [2.44,2.47,2.57,2.41,2.48,2.55,2.41,2.36,2.40,2.51,2.43,2.40,2.45,2.37,2.48,2.45,2.45,2.38] # pulses per degree
+# servo_driver =  [1,   2,   1,   2,   1,   2,   1,   2,   1,   2,   1,   2,   1,   2,   1,   2,   1,   2]
+# servo_channel = [14,  0,   9,   6,   2,   13,  15,  1,   10,  5,   1,   14,  13,  2,   11,  4,   0,   15]
+# servo_max_angle = 75
+# servo_min_angle = -75
 
-servos[6] = servo.Servo(pca_b.channels[13],  actuation_range = 300, min_pulse=SERVOMIN, max_pulse=SERVOMAX)
-servos[7] = servo.Servo(pca_b.channels[14],  actuation_range = 300, min_pulse=SERVOMIN, max_pulse=SERVOMAX)
-servos[8] = servo.Servo(pca_b.channels[15], actuation_range = 300, min_pulse=SERVOMIN, max_pulse=SERVOMAX)
+servos = [None] * 18 # initialise servo list
 
-servos[9] = servo.Servo(pca_b.channels[2],  actuation_range = 300, min_pulse=SERVOMIN, max_pulse=SERVOMAX)
-servos[10] = servo.Servo(pca_b.channels[3],  actuation_range = 300, min_pulse=SERVOMIN, max_pulse=SERVOMAX)
-servos[11] = servo.Servo(pca_b.channels[4], actuation_range = 300, min_pulse=SERVOMIN, max_pulse=SERVOMAX)
+servos[0] = servo.Servo(pca_a.channels[8],  actuation_range = 150, min_pulse=SERVOMIN, max_pulse=SERVOMAX)
+servos[1] = servo.Servo(pca_a.channels[9],  actuation_range = 150, min_pulse=SERVOMIN, max_pulse=SERVOMAX)
+servos[2] = servo.Servo(pca_a.channels[10], actuation_range = 150, min_pulse=SERVOMIN, max_pulse=SERVOMAX)
 
-servos[12] = servo.Servo(pca_b.channels[5],  actuation_range = 300, min_pulse=SERVOMIN, max_pulse=SERVOMAX)
-servos[13] = servo.Servo(pca_b.channels[6],  actuation_range = 300, min_pulse=SERVOMIN, max_pulse=SERVOMAX)
-servos[14] = servo.Servo(pca_b.channels[7], actuation_range = 300, min_pulse=SERVOMIN, max_pulse=SERVOMAX)
+servos[3] = servo.Servo(pca_a.channels[11],  actuation_range = 150, min_pulse=SERVOMIN, max_pulse=SERVOMAX)
+servos[4] = servo.Servo(pca_a.channels[12],  actuation_range = 150, min_pulse=SERVOMIN, max_pulse=SERVOMAX)
+servos[5] = servo.Servo(pca_a.channels[13], actuation_range = 150, min_pulse=SERVOMIN, max_pulse=SERVOMAX)
 
-servos[15] = servo.Servo(pca_a.channels[5],  actuation_range = 300, min_pulse=SERVOMIN, max_pulse=SERVOMAX)
-servos[16] = servo.Servo(pca_a.channels[6],  actuation_range = 300, min_pulse=SERVOMIN, max_pulse=SERVOMAX)
-servos[17] = servo.Servo(pca_a.channels[7], actuation_range = 300, min_pulse=SERVOMIN, max_pulse=SERVOMAX)
+servos[6] = servo.Servo(pca_b.channels[13],  actuation_range = 150, min_pulse=SERVOMIN, max_pulse=SERVOMAX)
+servos[7] = servo.Servo(pca_b.channels[14],  actuation_range = 150, min_pulse=SERVOMIN, max_pulse=SERVOMAX)
+servos[8] = servo.Servo(pca_b.channels[15], actuation_range = 150, min_pulse=SERVOMIN, max_pulse=SERVOMAX)
 
-servos[18] = servo.Servo(pca_b.channels[0],  actuation_range = 300, min_pulse=SERVOMIN, max_pulse=SERVOMAX)
-servos[19] = servo.Servo(pca_b.channels[1], actuation_range = 300, min_pulse=SERVOMIN, max_pulse=SERVOMAX)
+servos[9] = servo.Servo(pca_b.channels[2],  actuation_range = 150, min_pulse=SERVOMIN, max_pulse=SERVOMAX)
+servos[10] = servo.Servo(pca_b.channels[3],  actuation_range = 150, min_pulse=SERVOMIN, max_pulse=SERVOMAX)
+servos[11] = servo.Servo(pca_b.channels[4], actuation_range = 150, min_pulse=SERVOMIN, max_pulse=SERVOMAX)
+
+servos[12] = servo.Servo(pca_b.channels[5],  actuation_range = 150, min_pulse=SERVOMIN, max_pulse=SERVOMAX)
+servos[13] = servo.Servo(pca_b.channels[6],  actuation_range = 150, min_pulse=SERVOMIN, max_pulse=SERVOMAX)
+servos[14] = servo.Servo(pca_b.channels[7], actuation_range = 150, min_pulse=SERVOMIN, max_pulse=SERVOMAX)
+
+servos[15] = servo.Servo(pca_a.channels[5],  actuation_range = 150, min_pulse=SERVOMIN, max_pulse=SERVOMAX)
+servos[16] = servo.Servo(pca_a.channels[6],  actuation_range = 150, min_pulse=SERVOMIN, max_pulse=SERVOMAX)
+servos[17] = servo.Servo(pca_a.channels[7], actuation_range = 150, min_pulse=SERVOMIN, max_pulse=SERVOMAX)
 
 
 # Initialize routines
@@ -154,17 +179,6 @@ async def controlLoop():
             else:
                 powerdown = False
         
-        clawPos = constrain(clawPos, 0, 67)
-        if(clawOpen):
-            if(clawPos > 0):
-                clawPos -= 2
-            else:
-                clawOpen = False;
-        elif(clawClose):
-            if(clawPos < 58):
-                clawPos += 2
-            else:
-                clawClose = False
         
         # Configure and run the hexapod engine
         Hex.gSeq = waveGait
@@ -195,10 +209,7 @@ async def controlLoop():
         angleP = constrain( Hex.legAngle[5][0]*180/PI, -65, 65);
         angleQ = constrain( Hex.legAngle[5][1]*180/PI, -100, 100);
         angleR = constrain(-Hex.legAngle[5][2]*180/PI, -100, 100);
-        
-        angleS = constrain(Hex.rotZ*180/PI*1.7, -65, 65);
-        angleT = constrain(clawPos, 0, 67);
-        
+               
         # servo angle offsets
         angleA += -24;
         angleB += 18;
@@ -225,11 +236,7 @@ async def controlLoop():
         angleP += 23;
         angleQ += 0;
         angleR += 0;
-        
-        angleS += -8;
-        angleT += 0;
-        
-        
+              
         #print(angleA)
         
         # servo angle mapping
@@ -237,11 +244,9 @@ async def controlLoop():
         servos[1].angle = angleB + 120;
         servos[2].angle = angleC + 120;
         
-        
         servos[3].angle = angleD + 90;
         servos[4].angle = angleE + 120;
         servos[5].angle = angleF + 120;
-        
         
         servos[6].angle = angleG + 90;
         servos[7].angle = angleH + 120;
@@ -258,13 +263,8 @@ async def controlLoop():
         servos[15].angle = angleP + 90;
         servos[16].angle = angleQ + 120;
         servos[17].angle = angleR + 120;
-        
-        servos[18].angle = angleS + 120;
-        servos[19].angle = angleT + 120;
-        
-        
-        
-        
+              
+
         #pca_a.channels[8].duty_cycle = 0x0000
         #pca_b.channels[0].duty_cycle = 0x0000
         #time.sleep(1)
@@ -323,10 +323,7 @@ async def gameLoop():
                         Hex.gaitSpeed = 2.0
                         Hex.legSpeed = 1.3
                         Hex.gSeq = list(waveGait)                        
-                    elif joystick.get_button(0):
-                        clawClose = True
-                    elif joystick.get_button(1):
-                        clawOpen = True
+
                         
                 if event.type == pygame.JOYAXISMOTION:                        
                     axis0 = joystick.get_axis(0)
@@ -424,15 +421,6 @@ async def position(sid, message):
         Hex.gSeq = list(waveGait)
     await asyncio.sleep(0.005)
     
-@sio.on('claw')
-async def position(sid, message):
-    global clawOpen, clawClose
-    if message == 1:
-        clawClose = True
-    elif message == 0:
-        clawOpen = True
-    await asyncio.sleep(0.005)
-
 @sio.on('power')
 async def position(sid, message):
     if message == 1:

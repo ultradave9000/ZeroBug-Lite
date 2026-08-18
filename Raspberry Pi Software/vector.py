@@ -48,13 +48,13 @@ class gaitEngine(object):
     rotY = float()
     rotZ = float()
     #  hexapod constants
-    coxa = int(11.6)
-    femur = 44
-    tibia = 69
+    coxa = int(27.6)
+    femur = 40
+    tibia = 80
     
     coxaPos = [] #  body position
     leg = [] # current leg positions (without body translation/rotation)
-    legS = [] # defaulegT leg positions
+    legS = [] # default leg positions
     legT = [] # target leg positions
     legIK = [] # leg positions for body translation/rotation
     
@@ -115,7 +115,7 @@ class gaitEngine(object):
                 else: # reset target when getting to far off center
                     self.legT[i]._setto(self.legS[i])
                     
-        # if leg's turn in sequence AND if not on target AND not already moving
+        # if legs turn in sequence AND if not on target AND not already moving
         # TODO: Do not rely on rounding gaitStepN to match the sequence in gSeq
         for legN in range (0, 6):
             if self.gSeq[int(self.gaitStepN)][legN] == 1 and not self.leg[legN].equalegS(self.legT[legN]) and self.legMoving[legN] == 0:
@@ -137,18 +137,32 @@ class gaitEngine(object):
     # Body Translation/Rotation
     def runBodyIK(self):
 
-        self.traX = constrain(self.traX, -40, 40)
+        self.traX = constrain(self.traX, -40, 40) # **** makes these constants
         self.traY = constrain(self.traY, -40, 40)
         self.traZ = constrain(self.traZ, -40, 40)
         
-        self.rotX = constrain(self.rotX, -0.3, 0.3)
+        self.rotX = constrain(self.rotX, -0.3, 0.3) # **** makes these constants
         self.rotY = constrain(self.rotY, -0.25, 0.25)
         self.rotZ = constrain(self.rotZ, -0.25, 0.25)
         
+        # Pre-calculate cosines & sines for efficiency:
+        # **** could also check for changes in rotX, rotY, rotZ and only calc if different to before
+        cosRotX = cos(self.rotX)
+        sinRotX = sin(self.rotX)
+        cosRotY = cos(self.rotY)
+        sinRotY = sin(self.rotY)
+        cosRotZ = cos(self.rotZ)
+        sinRotZ = sin(self.rotZ)
+        
         for i in range(0, 6):
-            self.legIK[i].x = self.leg[i].x * cos(self.rotZ) * cos(self.rotX) - self.leg[i].z * cos(self.rotZ) * sin(self.rotX) + self.leg[i].y * sin(self.rotZ) + self.traX
-            self.legIK[i].y = self.leg[i].x * (sin(self.rotY) * sin(self.rotX) - cos(self.rotY) * sin(self.rotZ) * cos(self.rotX)) + self.leg[i].z * (cos(self.rotY) * sin(self.rotZ) * sin(self.rotX) + sin(self.rotY) * cos(self.rotX)) + self.leg[i].y * cos(self.rotY) * cos(self.rotZ) + self.traY
-            self.legIK[i].z = self.leg[i].x * (sin(self.rotY) * sin(self.rotZ) * cos(self.rotX) + cos(self.rotY) * sin(self.rotX)) + self.leg[i].z * (sin(self.rotY) * sin(self.rotZ) * sin(self.rotX) + cos(self.rotY) * cos(self.rotX)) - self.leg[i].y * sin(self.rotY) * cos(self.rotZ) + self.traZ
+            self.legIK[i].x = self.leg[i].x * cosRotZ * cosRotX - self.leg[i].z * cosRotZ * sinRotX + self.leg[i].y * sinRotZ + self.traX
+            #self.legIK[i].x = self.leg[i].x * cos(self.rotZ) * cos(self.rotX) - self.leg[i].z * cos(self.rotZ) * sin(self.rotX) + self.leg[i].y * sin(self.rotZ) + self.traX
+                        
+            self.legIK[i].y = self.leg[i].x * (sinRotY * sinRotX - cosRotY * sinRotZ * cosRotX) + self.leg[i].z * (cosRotY * sinRotZ * sinRotX + sinRotY * cosRotX) + self.leg[i].y * cosRotY * cosRotZ + self.traY
+            #self.legIK[i].y = self.leg[i].x * (sin(self.rotY) * sin(self.rotX) - cos(self.rotY) * sin(self.rotZ) * cos(self.rotX)) + self.leg[i].z * (cos(self.rotY) * sin(self.rotZ) * sin(self.rotX) + sin(self.rotY) * cos(self.rotX)) + self.leg[i].y * cos(self.rotY) * cos(self.rotZ) + self.traY
+            
+            self.legIK[i].z = self.leg[i].x * (sinRotY * sinRotZ * cosRotX + cosRotY * sinRotX) + self.leg[i].z * (sinRotY * sinRotZ * sinRotX + cosRotY * cosRotX) - self.leg[i].y * sinRotY * cosRotZ + self.traZ
+            #self.legIK[i].z = self.leg[i].x * (sin(self.rotY) * sin(self.rotZ) * cos(self.rotX) + cos(self.rotY) * sin(self.rotX)) + self.leg[i].z * (sin(self.rotY) * sin(self.rotZ) * sin(self.rotX) + cos(self.rotY) * cos(self.rotX)) - self.leg[i].y * sin(self.rotY) * cos(self.rotZ) + self.traZ
 
     # Full Leg IK (based on https://oscarliang.com/inverse-kinematics-implementation-hexapod-robots/)
     def runLegIK(self):
